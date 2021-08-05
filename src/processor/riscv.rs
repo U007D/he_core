@@ -24,14 +24,16 @@ impl IProcessor for Processor {
     #[allow(clippy::inline_always)]
     #[inline(always)]
     fn init_proc() {
+        Self::disable_mmu();
         #[allow(unsafe_code)]
         unsafe {
             asm! {
-                // Park all `hart`s except `hart` 0
+            // Park all `hart`s except `hart` 0
                 "csrr t0, mhartid",
                 "bnez t0, park",
             }
         }
+        Self::init_stack();
     }
 
     // Minimize stack usage since it is not yet explicitly set up
@@ -55,8 +57,8 @@ impl IProcessor for Processor {
             asm! {
                 // Put the `hart` to sleep (wait for `ifi`)
                 "park:",
-                "wfi",
-                "j park",
+                    "wfi",
+                    "j park",
             }
         }
         unreachable!()
