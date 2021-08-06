@@ -1,20 +1,20 @@
-#![feature(asm)]
+#![feature(asm, naked_functions)]
 #![warn(clippy::all, clippy::nursery, clippy::pedantic, rust_2018_idioms)]
 // Safety-critical application lints
 #![deny(
-    clippy::pedantic,
-    clippy::float_cmp_const,
-    clippy::indexing_slicing,
-    clippy::integer_arithmetic,
-    clippy::unwrap_used
+clippy::pedantic,
+clippy::float_cmp_const,
+clippy::indexing_slicing,
+clippy::integer_arithmetic,
+clippy::unwrap_used
 )]
 #![allow(
-    clippy::implicit_return,
-    clippy::iter_nth_zero,
-    clippy::match_bool,
-    clippy::missing_errors_doc,
-    clippy::module_name_repetitions,
-    clippy::wildcard_imports
+clippy::implicit_return,
+clippy::iter_nth_zero,
+clippy::match_bool,
+clippy::missing_errors_doc,
+clippy::module_name_repetitions,
+clippy::wildcard_imports
 )]
 // To use the `unsafe` keyword, do not remove the `unsafe_code` attribute entirely.
 // Instead, change it to `#![allow(unsafe_code)]` or preferably `#![deny(unsafe_code)]` + opt-in
@@ -27,6 +27,7 @@
 // #![warn(clippy::cargo, clippy::restriction, missing_docs, warnings)]
 // #![allow(clippy::implicit_return)]
 #![no_std]
+pub mod option_ext;
 pub mod processor;
 pub mod traits;
 pub mod types;
