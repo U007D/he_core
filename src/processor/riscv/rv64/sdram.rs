@@ -64,7 +64,7 @@ fn init_ddr_pllcfg(prci: &mut PRCI) {
     w.pllq().bits(2)
   });
   // Busy wait for pll lock
-  while prci.ddr_pllcfg.read().plllock().bit_is_clear() {}
+  while prci.ddr_pllcfg.read().plllock().bit_is_set() {}
 }
 
 #[allow(unsafe_code)]

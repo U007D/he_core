@@ -10,7 +10,7 @@ pub fn init(peripherals: &mut Peripherals) {
     w.pllq().bits(5)
   });
   // Busy wait for pll lock
-  while peripherals.PRCI.gemgxl_pllcfg.read().plllock().bit_is_clear() {}
+  while peripherals.PRCI.gemgxl_pllcfg.read().plllock().bit_is_set() {}
 
   // Release lock gate (clock glitch suppressor)
   peripherals.PRCI.gemgxl_plloutdiv.modify(|_, w| w.pllcke().set_bit());

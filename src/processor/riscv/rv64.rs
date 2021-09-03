@@ -25,55 +25,50 @@ impl IProcessor for Processor {
   extern "C" fn boot() -> ! {
     #[allow(unsafe_code)]
         unsafe {
-      // There are a number of ways to import the linker symbols we want to use into inline
-      // assembly. Inline `asm!` uses `RISC-V`'s "relative" addressing modes, which limits
-      // address to +/- ~524_287 bytes away from the current program counter.  Setting the
-      // stack pointer to the end of 16GB RAM far exceeds this limit.  Thus we use a less
-      // straightforward method of loading addresses--load them as ordinary 64-bit values and
-      // operate on the in address-indirect mode in assembly.
       #[rustfmt::skip]
-      asm! {
-      // Park all `hart`s except `hart` 0
-      "csrr t0, mhartid",
-      "bnez t0, park",
+      asm! { "
+          // Park all `hart`s except `hart` 0
+          csrr t0, mhartid
+          bnez t0, park
 
-      // Initialize `.bss`
-      // Ensure symbol offsets compile even when RISC-V code model does not support full 64-bit offsets
-      "la t0, BSS_START",
-      "ld t0, 0(t0)",
-      "la t1, BSS_END",
-      "ld t1, 0(t1)",
-      // If `.bss_end` is 0, exclusive end wrapped address space or `BSS` size is 0.  Either way, skip negative check.
-      "beq t1, zero, 2f",
-      // Is `.bss` size negative (when `.bss_end` is non-zero)?  If yes, memory layout is misconfigured.
-      "bgtu t0, t1, 5f",
-      "2:",
-      // Are *both* `.bss_start` and `.bss_end` 0? Zero-sized block; `BSS` initialization will not occur
-      "or t2, t0, t1",
-      "beq t2, zero, 3f",
-      // Make `.bss_end` inclusive to eliminate wrapping artifacts
-      "addi t1, t1, -1",
+          // Initialize `.bss` section
+          // Load and validate `.bss` start value
+          la t0, BSS_START
+          ld t0, 0(t0)
+          // Is `.bss` start zero?  If yes, memory layout is misconfigured
+          beq t0, zero, 4f
 
-      // Zero out BSS
-      "3:",
-      "bgtu t0, t1, 4f",
-      "sd zero, (t0)",
-      "addi t0, t0, 8",
-      "j 3b",
-      "4:",
+          // Load and validate `.bss` end value
+          la t1, BSS_END
+          ld t1, 0(t1)
+          // Is `.bss` end equal to start?  If yes, `.bss is zero-sized`, skip init
+          beq t0, t1, 3f
+          // Convert one-past-end iterator to inclusive-end iterator (simplifies range arithmetic)
+          addi t1, t1, -1
+          // Is `.bss` size negative?  If yes, memory layout is misconfigured.
+          bgtu t0, t1, 4f
 
-      // Initialize the stack
-      // Ensure symbol offsets compile even when RISC-V code model does not support full 64-bit offsets
-      "la t0, STACK_BASE",
-      "ld sp, 0(t0)",
+          // Zero out BSS
+          2:
+          sd zero, (t0)
+          addi t0, t0, 8
+          ble t0, t1, 2b
 
-      // Finish hardware initialization and run `main()`
-      "j finalize",
+          3:
+          // Initialize the stack
+          // Ensure symbol offsets compile even when RISC-V code model does not support full 64-bit offsets
+          la t0, STACK_BASE
+          ld sp, 0(t0)
 
-      // Whoops bad configuration; halt
-      // TODO: Indicate error condition using LEDs
-      "5:",
-      "unimp",
+          // Finish hardware initialization and run `main()`
+          jal zero, finalize
+          // TODO: Encode unexpected return from finalize condition
+
+          // Whoops bad configuration; halt
+          // TODO: Indicate error condition using LEDs
+          4:
+          unimp
+        ",
 
       // `.data`
       "BSS_START: .dword _BSS_START",
