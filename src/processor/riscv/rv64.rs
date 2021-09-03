@@ -19,41 +19,70 @@ extern "Rust" {
 pub struct Processor;
 
 impl IProcessor for Processor {
-  #[allow(unsafe_code, unsupported_naked_functions)]
+  #[allow(named_asm_labels, unsafe_code)]
   // Define `.boot` section so linker can explicitly place the `boot` function.
   #[link_section = ".boot"]
-  // `[no_mangle]` is both `unsafe` and required in order for the entry point to be recognized by
-  // the linker
-  // TODO: update function to init stack pointer in pure `asm!{}` as required by `#[naked]` to eliminate stack prelude.
+  // `[no_mangle]` is both `unsafe` and required in order for the entry point to be recognized by the linker
   #[naked]
   #[no_mangle]
-  // Enable use of linker-defined values in inline `asm!`--all other labels defined per
   // [Rust inline `asm!` documentation](https://doc.rust-lang.org/nightly/unstable-book/library-features/asm.html#labels)
   extern "C" fn boot() -> ! {
-    // Set the core-local stack pointer
-    let core_stack_base = (unsafe { _STACK_BASE } as usize)
-        .checked_sub(STACK_SIZE.checked_mul(mhartid::read()).expect(msg::PANIC_STACK_PTR_ADDRESS_OVERFLOW))
-        .expect(msg::PANIC_STACK_PTR_ADDRESS_OVERFLOW) as *const usize;
+    unsafe {
+      #[rustfmt::skip]
+      asm! { "
+          // Load initial stack base and per-core stack size (in XLEN words) values
+          la a0, STACK_BASE
+          ld t0, 0(a0)
+          la t2, STACK_SIZE_WORDS
 
-    // Park all cores except core 0
-    park_non_zero_core_id();
+          // Compute stack size in bytes: `t3 = STACK_SIZE_WORDS.checked_mul(WORD_SIZE)`
+          addi t3, zero, 0      // Init checked_mul accumulator
+          addi t4, zero, 8      // `WORD_SIZE` == 8
 
-    // Initialize `.bss` section with zeros
-    let (sbss, ebss) = unsafe { (*_BSS_START, *_BSS_END) };
-    init_bss(sbss, ebss);
+          20:
+          add t3, t3, t2
+          bltu t3, t2, 50f      // Overflow occurred, jump to stack size overflow handler
+          addi t4, t4, -1
+          bgtu t4, zero, 20b
 
-    // Init CPU
-    let mut peripherals = Peripherals::take().expect(msg::PANIC_NO_PERIPHERALS);
+          // Compute current core's stack base offset: `t1 = STACK_SIZE.checked_mul(core_id)`_
+          csrr t4, mhartid
+          addi t1, t0, 0
 
-    core_clock::init(&mut peripherals);
-    sdram::init(&mut peripherals);
-    eth::init(&mut peripherals);
+          30:
+          beq t4, zero, 40f
+          sub t1, t1, t3
+          bgtu t1, t0, 60f      // Overflow occurred; jump to stack offset overflow handler
+          add t4, t4, -1
+          j 30b
 
-    // Initialization complete-- jump to `main()`
-    // The following call to `main` is `unsafe` because `main()` will be defined in another crate and Rust's native ABI
-    // is unstable. The developer must ensure both this crate and `main` are compiled by the same Rust compiler
-    // version to ensure ABI compatibility/avoid UB.
-    unsafe { main(peripherals) }
+          // Set core-local stack pointer
+          40:
+          addi sp, t1, 0
+
+          // Stack pointer is set; jump to `init_core()`
+          j init_core
+
+          // Stack size overflow handler
+          50:
+          addi t0, zero, 1         // Set error condition 1
+          j 70f
+
+          // Stack base offset overflow handler
+          60:
+          addi t0, zero, 2              // Set error condition 2
+          j 70f
+
+          // Overflow handler
+          70:
+          // TODO: Indicate error condition indicated in t0
+          unimp                // Crash the core (no stack yet to safely jump to `park()`
+        ",
+      "STACK_BASE: .dword _STACK_BASE",
+      "STACK_SIZE_WORDS: .dword _STACK_SIZE_WORDS",
+      options(noreturn),
+      }
+    }
   }
 
   // TODO: Send `Result` to `park()` to provide error indication to user
@@ -66,10 +95,11 @@ impl IProcessor for Processor {
     #[allow(unsafe_code)]
         unsafe {
       #[rustfmt::skip]
-      asm! {
       // Put the `hart` to sleep (wait for `ifi`)
-      "wfi",
-      "j park",
+      asm! { "
+          wfi
+          j park
+        ",
       options(noreturn)
       }
     }
@@ -99,6 +129,30 @@ fn init_bss(sbss: usize, ebss: usize) {
       *(addr as *mut usize) = 0;
     });
   }
+}
+
+#[no_mangle]
+#[allow(unsafe_code)]
+extern "C" fn init_core() -> ! {
+  // Park all cores except core 0
+  park_non_zero_core_id();
+
+  // Initialize `.bss` section with zeros
+  let (sbss, ebss) = unsafe { (*_BSS_START, *_BSS_END) };
+  init_bss(sbss, ebss);
+
+  // Init CPU
+  let mut peripherals = Peripherals::take().expect(msg::PANIC_NO_PERIPHERALS);
+
+  core_clock::init(&mut peripherals);
+  sdram::init(&mut peripherals);
+  eth::init(&mut peripherals);
+
+  // Initialization complete-- jump to `main()`
+  // The following call to `main` is `unsafe` because `main()` will be defined in another crate and Rust's native ABI
+  // is unstable. The developer must ensure both this crate and `main` are compiled by the same Rust compiler
+  // version to ensure ABI compatibility/avoid UB.
+  unsafe { main(peripherals) }
 }
 
 fn park_non_zero_core_id() {
