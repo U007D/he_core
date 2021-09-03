@@ -1,4 +1,4 @@
-#![feature(asm, naked_functions)]
+#![feature(asm, const_option, const_panic, naked_functions)]
 #![warn(clippy::all, clippy::nursery, clippy::pedantic, rust_2018_idioms)]
 // Safety-critical application lints
 #![deny(
@@ -14,6 +14,7 @@ clippy::iter_nth_zero,
 clippy::match_bool,
 clippy::missing_errors_doc,
 clippy::module_name_repetitions,
+clippy::similar_names,
 clippy::wildcard_imports
 )]
 // To use the `unsafe` keyword, do not remove the `unsafe_code` attribute entirely.
