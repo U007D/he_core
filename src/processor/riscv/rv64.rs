@@ -9,7 +9,6 @@ use riscv::register::mhartid;
 extern "C" {
   static _BSS_START: *const usize;
   static _BSS_END: *const usize;
-  static _STACK_BASE: *const usize;
 }
 
 extern "Rust" {
@@ -30,7 +29,7 @@ impl IProcessor for Processor {
     unsafe {
       #[rustfmt::skip]
       asm! { "
-          // Load initial stack base and per-core stack size (in XLEN words) values
+          // Load initial stack base and per-core stack size (in XLEN words)
           la a0, STACK_BASE
           ld t0, 0(a0)
           la t2, STACK_SIZE_WORDS
@@ -76,8 +75,9 @@ impl IProcessor for Processor {
           // Overflow handler
           70:
           // TODO: Indicate error condition indicated in t0
-          unimp                // Crash the core (no stack yet to safely jump to `park()`
+          unimp                // Crash the core (stack setup failed, so can't safely jump to `park()`)
         ",
+      ".align 8",
       "STACK_BASE: .dword _STACK_BASE",
       "STACK_SIZE_WORDS: .dword _STACK_SIZE_WORDS",
       options(noreturn),
