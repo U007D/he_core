@@ -1,4 +1,5 @@
 #![allow(clippy::unwrap_used)]
+
 use core::num::NonZeroUsize;
 
 pub mod msg;
@@ -23,6 +24,6 @@ pub const WORD_SIZE: usize = 0x1 << WORD_SIZE_BIT.get();
 // Ensure invariants are upheld
 #[allow(clippy::assertions_on_constants)]
 const fn _const_invariants() {
-  // Invariant: ensure `WORD_SIZE` is non-zero
-  debug_assert!(WORD_SIZE != 0);
+    // Invariant: ensure `WORD_SIZE` is non-zero
+    debug_assert!(WORD_SIZE != 0);
 }

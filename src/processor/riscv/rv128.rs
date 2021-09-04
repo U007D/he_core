@@ -3,19 +3,19 @@ use crate::traits::IProcessor;
 pub struct Processor;
 
 impl IProcessor for Processor {
-  #[naked]
-  #[no_mangle]
-  extern "C" fn boot() -> ! {
-    #[allow(unsafe_code)]
-        unsafe {
-      #[rustfmt::skip]
-      asm! {
-      // Disable MMU (should already be disabled, but now we're certain)
-      "csrw satp, zero",
+    #[naked]
+    #[no_mangle]
+    extern "C" fn boot() -> ! {
+        #[allow(unsafe_code)]
+            unsafe {
+            #[rustfmt::skip]
+            asm! {
+            // Disable MMU (should already be disabled, but now we're certain)
+            "csrw satp, zero",
 
-      // Park all `hart`s except `hart` 0
-      "csrr t0, mhartid",
-      "bnez t0, park",
+            // Park all `hart`s except `hart` 0
+            "csrr t0, mhartid",
+            "bnez t0, park",
 
       // Initialize `.bss`
       // Ensure symbol offsets compile even when RISC-V code model does not support full 64-bit offsets
@@ -40,31 +40,31 @@ impl IProcessor for Processor {
       // Ensure symbol offsets compile even when RISC-V code model does not support full 64-bit offsets
       "STACK_START: .dword _STACK_START",
       "la t0, STACK_START",
-      "ld sp, 0(t0)",
+            "ld sp, 0(t0)",
 
-      // Jump to `main()`
-      "j main",
+            // Jump to `main()`
+            "j main",
 
-      // Whoops
-      "negative_sized_bss:",
-      "unimp",
-      options(noreturn)
-      }
+            // Whoops
+            "negative_sized_bss:",
+            "unimp",
+            options(noreturn)
+            }
+        }
     }
-  }
 
-  #[naked]
-  #[no_mangle]
-  extern "C" fn park() -> ! {
-    #[allow(unsafe_code)]
-        unsafe {
-      #[rustfmt::skip]
-      asm! {
-      // Put the `hart` to sleep (wait for `ifi`)
-      "wfi",
-      "j park",
-      options(noreturn)
-      }
+    #[naked]
+    #[no_mangle]
+    extern "C" fn park() -> ! {
+        #[allow(unsafe_code)]
+            unsafe {
+            #[rustfmt::skip]
+            asm! {
+            // Put the `hart` to sleep (wait for `ifi`)
+            "wfi",
+            "j park",
+            options(noreturn)
+            }
+        }
     }
-  }
 }

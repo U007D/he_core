@@ -28,7 +28,11 @@ clippy::wildcard_imports
 // #![warn(clippy::cargo, clippy::restriction, missing_docs, warnings)]
 // #![allow(clippy::implicit_return)]
 #![no_std]
+
+pub use error::{Error, Result};
+
 mod consts;
+mod error;
 pub mod option_ext;
 pub mod processor;
 pub mod traits;
