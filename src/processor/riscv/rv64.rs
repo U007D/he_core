@@ -1,14 +1,14 @@
 mod core_clock;
 mod eth;
-mod sdram;
+mod dram;
 
 use crate::{consts::*, traits::IProcessor};
 use fu740_hal::pac::Peripherals;
 use riscv::register::mhartid;
 
 extern "C" {
-  static _BSS_START: *const usize;
-  static _BSS_END: *const usize;
+  static _BSS_START: usize;
+  static _BSS_END: usize;
 }
 
 extern "Rust" {
@@ -29,6 +29,11 @@ impl IProcessor for Processor {
     unsafe {
       #[rustfmt::skip]
       asm! { "
+          la a1, _BSS_START
+          ld t1, 0(a1)
+          la a2, _BSS_END
+          ld t2, 0(a2)
+
           // Load initial stack base and per-core stack size (in XLEN words)
           la a0, STACK_BASE
           ld t0, 0(a0)
@@ -110,7 +115,7 @@ impl IProcessor for Processor {
 fn init_bss(sbss: usize, ebss: usize) {
   // Is `.bss` start zero?  If yes, memory layout is misconfigured
   if sbss == 0 {
-    // TODO: Indicate error condition
+    // TODO: Indicate error condition (use `Result`)
     Processor::park()
   }
 
@@ -120,7 +125,7 @@ fn init_bss(sbss: usize, ebss: usize) {
     let incl_ebss = ebss.wrapping_sub(1);
     // Is `.bss` size negative?  If yes, memory layout is misconfigured.
     if incl_ebss < sbss {
-      // TODO: Indicate error condition
+      // TODO: Indicate error condition (use `Result`)
       Processor::park()
     }
 
@@ -138,14 +143,14 @@ extern "C" fn init_core() -> ! {
   park_non_zero_core_id();
 
   // Initialize `.bss` section with zeros
-  let (sbss, ebss) = unsafe { (*_BSS_START, *_BSS_END) };
+  let (sbss, ebss) = unsafe { (&_BSS_START as *const usize as usize, &_BSS_END as *const usize as usize) };
   init_bss(sbss, ebss);
 
   // Init CPU
   let mut peripherals = Peripherals::take().expect(msg::PANIC_NO_PERIPHERALS);
 
   core_clock::init(&mut peripherals);
-  sdram::init(&mut peripherals);
+  dram::init(&mut peripherals);
   eth::init(&mut peripherals);
 
   // Initialization complete-- jump to `main()`
