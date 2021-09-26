@@ -7,7 +7,7 @@ impl IProcessor for Processor {
     #[no_mangle]
     extern "C" fn boot() -> ! {
         #[allow(unsafe_code)]
-            unsafe {
+        unsafe {
             #[rustfmt::skip]
             asm! {
             // Disable MMU (should already be disabled, but now we're certain)
@@ -57,7 +57,7 @@ impl IProcessor for Processor {
     #[no_mangle]
     extern "C" fn park() -> ! {
         #[allow(unsafe_code)]
-            unsafe {
+        unsafe {
             #[rustfmt::skip]
             asm! {
             // Put the `hart` to sleep (wait for `ifi`)

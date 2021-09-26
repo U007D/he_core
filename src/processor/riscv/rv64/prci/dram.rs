@@ -1,17 +1,17 @@
-use fu740_hal::pac::{Peripherals, PRCI};
+use fu740_hal::pac::PRCI;
 
 mod ddr_data;
 
 // Required to write to registers whose `.svd` definition does not specify valid vs invalid bit patterns
 #[allow(unsafe_code)]
-pub fn init(peripherals: &mut Peripherals) {
+pub fn init(prci: &PRCI) {
     // Following initialization procedure described in
     // [fu740 manual](https://sifive.cdn.prismic.io/sifive/de1491e5-077c-461d-9605-e8a0ce57337d_fu740-c000-manual-v1p3.pdf).
     // Step 1 - Configure `ddr_pllcfg` (DRAM control clock PLL)
-    init_ddr_pllcfg(&mut peripherals.PRCI);
+    init_ddr_pllcfg(&prci);
 
     // Step 2 - Bring DDR subsystem out of reset
-    take_ddr_out_of_reset(&mut peripherals.PRCI);
+    take_ddr_out_of_reset(&prci);
 
     // Step 3 + 6 - Configure DDR controller
     configure_ddr_controller();
@@ -27,7 +27,9 @@ pub fn init(peripherals: &mut Peripherals) {
 
     // TODO: Determine where this goes
     // Release lock gate (clock glitch suppressor)
-    peripherals.PRCI.ddr_plloutdiv.modify(|_, w| w.pllcke().set_bit());
+    prci.ddr_plloutdiv.modify(|_, w| w.pllcke().set_bit());
+
+    // TODO: Enable L2 cache is for all cores, once primary bootloader is runnng from flash)
 }
 
 #[allow(unsafe_code)]
@@ -56,7 +58,7 @@ fn disable_ddr_interrupts() {
 }
 
 #[allow(unsafe_code)]
-fn init_ddr_pllcfg(prci: &mut PRCI) {
+fn init_ddr_pllcfg(prci: &PRCI) {
     prci.ddr_pllcfg.modify(|_, w| unsafe {
         // values computed via [solver](https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=6f78bf1b6134600ac481b64fbf7e0339)
         w.pllr().bits(0);
@@ -82,21 +84,16 @@ fn init_ddr_subsystem() {
 }
 
 #[allow(unsafe_code)]
-fn take_ddr_out_of_reset(prci: &mut PRCI) {
+fn take_ddr_out_of_reset(prci: &PRCI) {
     // Step 2a - Release DDR controller reset
     prci.devices_reset_n.write(|w| w.ddrctrl_reset_n().set_bit());
 
-    // Step 2b - Wait (at least) one `ddrctrlclk` cycle (1/600_000_000s); CPU is at 1GHz so
+    // Step 2b - Wait (at least) one `ddrctrlclk` cycle (@600MHz); CPU is at 1GHz so
     // ceil(1GHz / 600MHz * 1 cycle)) == 2 `coreclk` cycles
     unsafe {
         asm! { "
       // Init `mcycle`
       csrw mcycle, zero         // set cycle counter to 0 (ensure no counter wrapping)
-
-
-      csrr t0, mcountinhibit
-      andi t1, t0, -1           // ensure `cycle` register is enabled (is incrementing).
-      csrw mcountinhibit, t1    // `mcountinhibit` is 32 bits on rv32 and rv64 (rv128 is unstated)
 
       // Busy wait for the required duration
       addi t1, zero, 2          // set exit condition to 1 `ddrctrlclk` ~= 2 `corectrlclk` cycles into the future
@@ -104,7 +101,7 @@ fn take_ddr_out_of_reset(prci: &mut PRCI) {
 
       2:
       csrr t0, mcycle           // read current cycle count
-      blt t0, t1, 2b            // exit when target number of cycles have elapsed
+      bltu t0, t1, 2b           // exit when target number of cycles have elapsed
    " }
     }
 
@@ -120,7 +117,7 @@ fn take_ddr_out_of_reset(prci: &mut PRCI) {
 
       3:
       csrr t0, mcycle           // read current cycle count
-      blt t0, t1, 3b            // exit when target number of cycles have elapsed
+      bltu t0, t1, 3b           // exit when target number of cycles have elapsed
    " }
     }
 }

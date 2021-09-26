@@ -7,4 +7,3 @@ pub use ddr_phy::{DDR_PHY_BASE_PTR, DDR_PHY_CONFIG, DDR_PHY_LEN};
 
 mod ddr_controller;
 mod ddr_phy;
-

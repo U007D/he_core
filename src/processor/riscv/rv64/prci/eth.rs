@@ -1,6 +1,8 @@
 use fu740_hal::pac::Peripherals;
 
+// TODO: Move to `fu740-hal` impl
 // Required to write to registers whose `.svd` definition does not specify valid vs invalid bit patterns
+// TODO: Return `EthClock` or equivalent instead of `()`?
 #[allow(unsafe_code)]
 pub fn init(peripherals: &mut Peripherals) {
     // Configure `gemgxlpll` (Ethernet) for 125Mhz (see fu740-c000-manual-v1p2, p. 84)
