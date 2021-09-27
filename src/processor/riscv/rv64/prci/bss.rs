@@ -1,4 +1,4 @@
-use crate::{consts::WORD_SIZE, processor::Processor, traits::IProcessor};
+use crate::{consts::ARCH_WORD_SIZE, processor::Processor, traits::IProcessor};
 
 #[allow(unsafe_code)]
 pub fn init_bss(sbss: usize, ebss: usize) {
@@ -19,7 +19,7 @@ pub fn init_bss(sbss: usize, ebss: usize) {
         }
 
         // Zero out BSS
-        (sbss..=incl_ebss).step_by(WORD_SIZE).for_each(|addr| unsafe {
+        (sbss..=incl_ebss).step_by(ARCH_WORD_SIZE).for_each(|addr| unsafe {
             *(addr as *mut usize) = 0;
         });
     }

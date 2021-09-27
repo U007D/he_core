@@ -1,86 +1,121 @@
 mod prci;
+mod init_bss;
 
-use crate::traits::IProcessor;
+use crate::{consts::*, traits::IProcessor};
+use static_assertions::*;
+
+const_assert!(ARCH_WORD_SIZE < u32::MAX as usize);
+// Used in `start()`s inline assembly (not recognized by compiler)
+#[allow(dead_code)]
+// `const_assert!` ensures no truncation can occur
+#[allow(clippy::cast_possible_truncation)]
+const ARCH_WORD_SIZE_U32: u32 = ARCH_WORD_SIZE as u32;
 
 pub struct Processor;
 
 impl IProcessor for Processor {
+    /// i) Init CPU w/`hart_id` 0; ii) Set up core-local `sp` for all cores; iii) Load & invoke 2BL, 3BL w/`hart_id` 0
     #[allow(named_asm_labels, unsafe_code)]
-    // Define `.boot` section so linker can explicitly place the `boot` function.
+    // Define `.start` section so linker can explicitly place the `start` function.
     #[link_section = ".start"]
-    // `[no_mangle]` is both `unsafe` and required in order for the entry point to be recognized by the linker
     #[naked]
+    // `[no_mangle]` is both `unsafe` and required in order for the entry point to be recognized by the linker
     #[no_mangle]
     // [Rust inline `asm!` documentation](https://doc.rust-lang.org/nightly/unstable-book/library-features/asm.html#labels)
     extern "C" fn start() -> ! {
         unsafe {
             asm! { "
-                la a1, _BSS_START
-                ld t1, 0(a1)
-                la a2, _BSS_END
-                ld t2, 0(a2)
+                // Store `hart_id` as arg 0
+                csrr s0, mhartid
+                // If not `hart_id` 0: skip init, configure core-local `sp` & park
+                bne s0, zero, 3f
 
-                // Load initial stack base and per-core stack size (in `XLEN`-bit words)
-                la a0, STACK_BASE
-                ld t0, 0(a0)
-                la t2, STACK_SIZE_WORDS
+                // `hart_id` 0 only: Set temporary stack pointer to end of `L2_LIM`
+                la sp, SRAM_END
+                ld sp, 0(sp)
 
-                // Compute stack size in bytes: `t3 = STACK_SIZE_WORDS.checked_mul(WORD_SIZE)`
-                addi t3, zero, 0        // Init checked_mul accumulator
-                addi t4, zero, 8        // For rv64, `WORD_SIZE` == 8
+                // Init `.bss`
+                jal init_bss
 
-                20:
-                add t3, t3, t2
-                bltu t3, t2, 50f        // Overflow occurred, jump to stack size overflow handler
-                addi t4, t4, -1
-                bgtu t4, zero, 20b
-
-                // Compute current core's stack base offset: `t1 = STACK_SIZE.checked_mul(core_id)`
-                csrr t4, mhartid
-                addi t1, t0, 0
-
-                30:
-                beq t4, zero, 40f
-                sub t1, t1, t3
-                bgtu t1, t0, 60f        // Overflow occurred; jump to stack offset overflow handler
-                add t4, t4, -1
-                j 30b
-
-                // Set core-local stack pointer
-                40:
-                addi sp, t1, 0
-
-                // Stack pointer is set; jump to `init()` for core peripherals
+                // Init CPU clock & DRAM controller
                 jal init
 
-                // TODO: Copy 2BL (Rust SBI) to DRAM 0x8000_0000 and `jal`?
-                // TODO: Copy 3BL to DRAM 0x8000_2000 and `jal`
-                // TODO:    Tempoary--remove `j main` and jump to 3BL at 0x8000_2000
+                // Initialize per-core `sp`
+                3:
+                // Step 1: Store machine-word size
+                lui t0, %hi(ARCH_WORD_SIZE_U32)
+                addi t0, t0, %lo(ARCH_WORD_SIZE_U32)
+
+                // Step 2: Load stack stack size (in `XLEN`-bit words)
+                la t1, STACK_SIZE_WORDS
+                ld t1, 0(t1)
+
+                // Step 3: Compute stack size in bytes: `t2 = STACK_SIZE_WORDS.checked_mul(ARCH_WORD_SIZE_U32)`
+                mulhu t2, t1, t0
+                bne t2, zero, 8f       // 64-bit overflow occurred, jump to stack size overflow handler
+                mul t2, t1, t0
+
+                // Step 3: Compute current core's stack base offset: `t1 = STACK_SIZE.checked_mul(core_id)`
+                mulhu t1, t2, s0
+                bne t1, zero, 9f       // 64-bit overflow occurred; jump to stack base offset overflow handler
+                mul t1, t2, s0
+
+                // Step 4: Compute absolute address of core-local stack base relative to `DRAM_END`:
+                //         `t0 = DRAM_END.checked_sub(stack_base_offset)`
+                la t0, DRAM_END
+                ld t0, 0(t0)
+                sub sp, t0, t1
+
+                // If DRAM_END is at the end of address space, one-past-the-end pointer will be 0--skip overflow check.
+                beq t0, zero, 4f
+                // Otherwise, ensure stack did not wrap (assert!(`STACK_BASE` >= `STACK_BASE` - `stack base offset`))
+                bltu t0, sp, 7f        // Core-local stack offset wrapped, jump to stack offset overflow handler
+
+                // `sp` is set; Park all non-zero `hart_id`s
+                4:
+                bne s0, zero, 5f
+
+                // TODO: Copy 2BL (Rust SBI) from flash to DRAM 0x8000_0000
+                // TODO: Copy 3BL from flash to DRAM 0x8000_2000
+                // TODO: `jal` to Rust SBI
+                // TODO: Tempoary--remove `j main`; `jal` or ensure Rust SBI `j/jal`s to 3BL
                 j main
 
                 // TODO: Indicate unexpected return from 3BL as error condition and `park`
+                5:
                 j park
 
+                // Misconfigured `.bss` handler
+                6:
+                addi t0, zero, 4        // Set error condition 4
+                j 12f
+
+                // Stack offset overflow handler
+                7:
+                addi t0, zero, 3        // Set error condition 3
+                j 12f
+
                 // Stack size overflow handler
-                50:
-                addi t0, zero, 1        // Set error condition 1
-                j 70f
+                8:
+                addi t0, zero, 2        // Set error condition 2
+                j 12f
 
                 // Stack base offset overflow handler
-                60:
-                addi t0, zero, 2        // Set error condition 2
-                j 70f
+                9:
+                addi t0, zero, 1        // Set error condition 1
+                j 12f
 
                 // Overflow handler
-                70:
+                12:
                 // TODO: Indicate error condition indicated in t0
                 unimp                   // Crash the core (stack setup failed, so can't safely jump to `park()`)
                 ",
             ".align 8",                 // Very important as GAS `.dword` keywords do not align
                                         // (for more, see https://github.com/riscv/riscv-asm-manual/issues/12)
-            "STACK_BASE: .dword _STACK_BASE",
+            "ARCH_WORD_SIZE_U32: .word ARCH_WORD_SIZE_U32",
+            "DRAM_END: .dword _DRAM_END",
+            "SRAM_END: .dword _SRAM_END",
             "STACK_SIZE_WORDS: .dword _STACK_SIZE_WORDS",
-            "DRAM_ORIGIN: .dword _DRAM_ORIGIN",
             options(noreturn),
             }
         }

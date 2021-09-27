@@ -15,7 +15,7 @@ extern "C" {
     static _BSS_END: usize;
 }
 
-// This function is called by `Processor::boot()`, the entry point into the program, as specified by the linker script.
+// This function is called by `Processor::start()`
 #[no_mangle]
 #[allow(unsafe_code)]
 pub extern "C" fn init() {

@@ -1,4 +1,4 @@
-#![feature(asm, const_option, const_panic, naked_functions)]
+#![feature(asm, const_option, const_panic, const_raw_ptr_deref, naked_functions)]
 #![warn(clippy::all, clippy::nursery, clippy::pedantic, rust_2018_idioms)]
 // Safety-critical application lints
 #![deny(
