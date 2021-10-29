@@ -28,7 +28,7 @@ impl IProcessor for Processor {
                 // Store `hart_id` as arg 0
                 csrr s0, mhartid
                 // If not `hart_id` 0: skip init, configure core-local `sp` & park
-                bne s0, zero, 3f
+                bne s0, zero, 2f
 
                 // `hart_id` 0 only: Set temporary stack pointer to end of `L2_LIM`
                 la sp, SRAM_END
@@ -38,10 +38,10 @@ impl IProcessor for Processor {
                 jal init_bss
 
                 // Init CPU clock & DRAM controller
-                jal init
+                jal init_core
 
                 // Initialize per-core `sp`
-                3:
+                2:
                 // Step 1: Store machine-word size
                 lui t0, %hi(ARCH_WORD_SIZE_U32)
                 addi t0, t0, %lo(ARCH_WORD_SIZE_U32)
@@ -52,12 +52,12 @@ impl IProcessor for Processor {
 
                 // Step 3: Compute stack size in bytes: `t2 = STACK_SIZE_WORDS.checked_mul(ARCH_WORD_SIZE_U32)`
                 mulhu t2, t1, t0
-                bne t2, zero, 8f       // 64-bit overflow occurred, jump to stack size overflow handler
+                bne t2, zero, 89f      // 64-bit overflow occurred, jump to stack size overflow handler
                 mul t2, t1, t0
 
                 // Step 3: Compute current core's stack base offset: `t1 = STACK_SIZE.checked_mul(core_id)`
                 mulhu t1, t2, s0
-                bne t1, zero, 9f       // 64-bit overflow occurred; jump to stack base offset overflow handler
+                bne t1, zero, 88f      // 64-bit overflow occurred; jump to stack base offset overflow handler
                 mul t1, t2, s0
 
                 // Step 4: Compute absolute address of core-local stack base relative to `DRAM_END`:
@@ -67,13 +67,13 @@ impl IProcessor for Processor {
                 sub sp, t0, t1
 
                 // If DRAM_END is at the end of address space, one-past-the-end pointer will be 0--skip overflow check.
-                beq t0, zero, 4f
+                beq t0, zero, 3f
                 // Otherwise, ensure stack did not wrap (assert!(`STACK_BASE` >= `STACK_BASE` - `stack base offset`))
-                bltu t0, sp, 7f        // Core-local stack offset wrapped, jump to stack offset overflow handler
+                bltu t0, sp, 87f       // Core-local stack offset wrapped, jump to stack offset overflow handler
 
                 // `sp` is set; Park all non-zero `hart_id`s
-                4:
-                bne s0, zero, 5f
+                3:
+                bne s0, zero, 4f
 
                 // TODO: Copy 2BL (Rust SBI) from flash to DRAM 0x8000_0000
                 // TODO: Copy 3BL from flash to DRAM 0x8000_2000
@@ -82,31 +82,26 @@ impl IProcessor for Processor {
                 j main
 
                 // TODO: Indicate unexpected return from 3BL as error condition and `park`
-                5:
+                4:
                 j park
 
-                // Misconfigured `.bss` handler
-                6:
-                addi t0, zero, 4        // Set error condition 4
-                j 12f
-
                 // Stack offset overflow handler
-                7:
+                87:
                 addi t0, zero, 3        // Set error condition 3
-                j 12f
-
-                // Stack size overflow handler
-                8:
-                addi t0, zero, 2        // Set error condition 2
-                j 12f
+                j 99f
 
                 // Stack base offset overflow handler
-                9:
+                88:
                 addi t0, zero, 1        // Set error condition 1
-                j 12f
+                j 99f
+
+                // Stack size overflow handler
+                89:
+                addi t0, zero, 2        // Set error condition 2
+                j 99f
 
                 // Overflow handler
-                12:
+                99:
                 // TODO: Indicate error condition indicated in t0
                 unimp                   // Crash the core (stack setup failed, so can't safely jump to `park()`)
                 ",

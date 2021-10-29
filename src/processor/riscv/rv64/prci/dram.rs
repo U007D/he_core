@@ -88,36 +88,41 @@ fn take_ddr_out_of_reset(prci: &PRCI) {
     // Step 2a - Release DDR controller reset
     prci.devices_reset_n.write(|w| w.ddrctrl_reset_n().set_bit());
 
-    // Step 2b - Wait (at least) one `ddrctrlclk` cycle (@600MHz); CPU is at 1GHz so
-    // ceil(1GHz / 600MHz * 1 cycle)) == 2 `coreclk` cycles
+    // Step 2b - Wait (at least) one `ddrctrlclk` cycle (@600MHz), per § 23.3 step 2b
+    //           https://sifive.cdn.prismic.io/sifive/18febb04-50b6-4880-9bf3-631e40daa809_fu740-c000-manual-v1p2.pdf
+    //           CPU @ 1GHz => ceil(1GHz / 600MHz * 1 cycle)) ~= 2 `coreclk` cycles
     unsafe {
         asm! { "
-      // Init `mcycle`
-      csrw mcycle, zero         // set cycle counter to 0 (ensure no counter wrapping)
+            // Init `mcycle`
+            csrw mcycle, zero         // set cycle counter to 0 (ensure no counter wrapping)
 
-      // Busy wait for the required duration
-      addi t1, zero, 2          // set exit condition to 1 `ddrctrlclk` ~= 2 `corectrlclk` cycles into the future
-                                // (almost certainly already elapsed)
+            // Set wait duration in clock cycles
+            addi t1, zero, 2          // set exit condition to 1 `ddrctrlclk` ~= 2 `corectrlclk` cycles into the future
+                                    // (almost certainly already elapsed)
 
-      2:
-      csrr t0, mcycle           // read current cycle count
-      bltu t0, t1, 2b           // exit when target number of cycles have elapsed
-   " }
+            // Busy wait for the required duration
+            2:
+            csrr t0, mcycle           // read current cycle count
+            bltu t0, t1, 2b           // exit when target number of cycles have elapsed
+        " }
     }
 
     // Step 2c - Release DDR controller register interface reset and DDR Subsystem PHY reset
     prci.devices_reset_n.write(|w| w.ddraxi_reset_n().set_bit().ddrahb_reset_n().set_bit().ddrphy_reset_n().set_bit());
 
-    // Step 2d - Wait (at least) 256 `ddrctrlclk` cycles; ceil(1GHz / 600MHz * 256 cycles) == 427 `coreclk` cycles
+    // Step 2d - Wait (at least) 256 `ddrctrlclk` cycles (@600MHz), per § 23.3 step 2d
+    //           https://sifive.cdn.prismic.io/sifive/18febb04-50b6-4880-9bf3-631e40daa809_fu740-c000-manual-v1p2.pdf
+    //           CPU @ 1GHz => ceil(1GHz / 600MHz * 256 cycles) ~= 427 `coreclk` cycles
     unsafe {
         asm! { "
-      // Busy wait for the required duration
-      csrr t0, mcycle
-      addi t1, t0, 427          // set exit condition to 256 `ddrctrlclk` == 427 `corectrlclk` cycles into the future
+            // Set wait duration in clock cycles
+            csrr t0, mcycle
+            addi t1, t0, 427          // set exit condition to 256 `ddrctrlclk` ~= 427 `corectrlclk` cycles into the future
 
-      3:
-      csrr t0, mcycle           // read current cycle count
-      bltu t0, t1, 3b           // exit when target number of cycles have elapsed
-   " }
+            // Busy wait for the required duration
+            3:
+            csrr t0, mcycle           // read current cycle count
+            bltu t0, t1, 3b           // exit when target number of cycles have elapsed
+        " }
     }
 }
