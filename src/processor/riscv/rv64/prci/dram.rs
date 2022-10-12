@@ -1,3 +1,4 @@
+use core::arch::asm;
 use fu740_hal::pac::PRCI;
 
 mod ddr_data;

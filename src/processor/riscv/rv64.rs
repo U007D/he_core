@@ -1,7 +1,12 @@
-mod prci;
 mod init_bss;
+mod prci;
 
-use crate::{consts::*, traits::IProcessor};
+use crate::{
+    consts::*,
+    traits::IProcessor,
+    types::{args::Args, never::Never},
+};
+use core::arch::asm;
 use static_assertions::*;
 
 const_assert!(ARCH_WORD_SIZE < u32::MAX as usize);
@@ -22,7 +27,9 @@ impl IProcessor for Processor {
     // `[no_mangle]` is both `unsafe` and required in order for the entry point to be recognized by the linker
     #[no_mangle]
     // [Rust inline `asm!` documentation](https://doc.rust-lang.org/nightly/unstable-book/library-features/asm.html#labels)
-    extern "C" fn start() -> ! {
+    extern "C" fn boot<F>(_: F) -> !
+    where
+        F: FnOnce(Args) -> Never, {
         unsafe {
             asm! { "
                 // Store `hart_id` as arg 0
@@ -116,19 +123,19 @@ impl IProcessor for Processor {
         }
     }
 
-    // TODO: Send `Result` to `park()` to provide error indication to user?
+    // TODO: Send `Result` to `halt()` to provide error indication to user?
     // `[no_mangle]` is both `unsafe` and required in order for the entry point to be recognized by
     // the linker
     #[allow(unsafe_code)]
     #[naked]
     #[no_mangle]
-    extern "C" fn park() -> ! {
+    extern "C" fn halt() -> ! {
         #[allow(unsafe_code)]
         unsafe {
             // Put the `hart` to sleep (wait for `ifi`)
             asm! { "
                 wfi
-                j park
+                j halt
             ",
             options(noreturn)
             }

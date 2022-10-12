@@ -30,6 +30,8 @@
 // #![allow(clippy::implicit_return)]
 #![no_std]
 
+extern crate alloc;
+
 pub use error::{Error, Result};
 
 mod consts;

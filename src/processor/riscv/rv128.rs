@@ -55,7 +55,7 @@ impl IProcessor for Processor {
 
     #[naked]
     #[no_mangle]
-    extern "C" fn park() -> ! {
+    extern "C" fn halt() -> ! {
         #[allow(unsafe_code)]
         unsafe {
             #[rustfmt::skip]

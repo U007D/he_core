@@ -35,6 +35,6 @@ pub extern "C" fn init_core() {
 fn park_non_zero_core_id() {
     // Park all `hart`s except `hart` 0
     if mhartid::read() != 0 {
-        Processor::park()
+        Processor::halt()
     }
 }
