@@ -1,4 +1,4 @@
-#![feature(asm, const_option, const_raw_ptr_deref, naked_functions)]
+#![feature(const_option, naked_functions)]
 #![warn(clippy::all, clippy::nursery, clippy::pedantic, rust_2018_idioms)]
 // Safety-critical application lints
 #![deny(
@@ -9,6 +9,7 @@
     clippy::unwrap_used
 )]
 #![allow(
+    clippy::enum_glob_use,
     clippy::implicit_return,
     clippy::iter_nth_zero,
     clippy::match_bool,
@@ -29,8 +30,6 @@
 // #![warn(clippy::cargo, clippy::restriction, missing_docs, warnings)]
 // #![allow(clippy::implicit_return)]
 #![no_std]
-
-extern crate alloc;
 
 pub use error::{Error, Result};
 

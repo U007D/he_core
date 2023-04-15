@@ -17,7 +17,7 @@ extern "C" {
 #[no_mangle]
 #[allow(unsafe_code)]
 pub extern "C" fn init_core() {
-    let peripherals = Peripherals::take().unwrap_or_else(|| unreachable!(msg::PANIC_NO_PERIPHERALS));
+    let peripherals = Peripherals::take().unwrap_or_else(|| unreachable!("{}", msg::PANIC_NO_PERIPHERALS));
 
     // Init all Power Reset Clock Interrupt devices
     let _ = clocks::init(peripherals.PRCI);

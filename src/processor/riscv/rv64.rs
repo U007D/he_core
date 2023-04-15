@@ -1,12 +1,10 @@
 mod init_bss;
 mod prci;
 
-use crate::{
-    consts::*,
-    traits::IProcessor,
-    types::{args::Args, never::Never},
-};
 use core::arch::asm;
+
+use crate::{consts::*, traits::IProcessor};
+
 use static_assertions::*;
 
 const_assert!(ARCH_WORD_SIZE < u32::MAX as usize);
@@ -19,17 +17,17 @@ const ARCH_WORD_SIZE_U32: u32 = ARCH_WORD_SIZE as u32;
 pub struct Processor;
 
 impl IProcessor for Processor {
-    /// i) Init CPU w/`hart_id` 0; ii) Set up core-local `sp` for all cores; iii) Load & invoke 2BL, 3BL w/`hart_id` 0
+    /// i) Init CPU w/`hart_id` 0; ii) Set up core-local `sp` for all cores; iii) Load & invoke 2BL,
+    /// 3BL w/`hart_id` 0
     #[allow(named_asm_labels, unsafe_code)]
     // Define `.start` section so linker can explicitly place the `start` function.
     #[link_section = ".start"]
     #[naked]
-    // `[no_mangle]` is both `unsafe` and required in order for the entry point to be recognized by the linker
+    // `[no_mangle]` is both `unsafe` and required in order for the entry point to be recognized by
+    // the linker
     #[no_mangle]
     // [Rust inline `asm!` documentation](https://doc.rust-lang.org/nightly/unstable-book/library-features/asm.html#labels)
-    extern "C" fn boot<F>(_: F) -> !
-    where
-        F: FnOnce(Args) -> Never, {
+    extern "C" fn boot() -> ! {
         unsafe {
             asm! { "
                 // Store `hart_id` as arg 0
